@@ -16,18 +16,18 @@ class AddressResource extends JsonResource
     {
          return [
             'id'                    => $this->id,
-            'address_line1'        => $this->address_line1,
-            'address_line2'        => $this->address_line2,
-            'postal_code'          => $this->postal_code,
+            'addressLine1'        => $this->address_line1,
+            'addressLine2'        => $this->address_line2,
+            'postalCode'          => $this->postal_code,
             'phone'                => $this->phone,
-            'is_default'           => (bool) $this->is_default,
+            'isDefault'           => (bool) $this->is_default,
             'country' =>$this->country?->country_name,
             'state'=>$this->state?->state_name ,
             'city' =>$this->city?->city_name,
             // raw IDs in case the client needs them
-            'country_id'     => $this->fullfillment_country_id,
-            'state_id'       => $this->fullfillment_state_id,
-            'city_id'        => $this->fullfillment_city_id,
+            'countryId'     => $this->fullfillment_country_id,
+            'stateId'       => $this->fullfillment_state_id,
+            'cityId'        => $this->fullfillment_city_id,
         ];
     }
 }

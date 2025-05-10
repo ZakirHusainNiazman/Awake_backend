@@ -124,6 +124,9 @@ class AddressController extends Controller
             ], 404);
         }
 
+        // Delete the address
+        $address->delete();
+
         // If the address being deleted is the default, we need to ensure there's another default address
         if ($address->is_default) {
             $nextDefaultAddress = Auth::user()->addresses()->where('is_default', false)->first();
@@ -133,9 +136,6 @@ class AddressController extends Controller
                 $nextDefaultAddress->update(['is_default' => true]);
             }
         }
-
-        // Delete the address
-        $address->delete();
 
         return response()->json([
             'message' => 'Address deleted successfully.',

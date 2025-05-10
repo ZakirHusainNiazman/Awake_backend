@@ -4,7 +4,9 @@ namespace App\Http\Controllers\User;
 
 use Carbon\Carbon;
 use App\Models\User\User;
+use Illuminate\Support\Str;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
@@ -13,6 +15,7 @@ use Illuminate\Support\Facades\Storage;
 use App\Http\Requests\User\LoginRequest;
 use App\Http\Requests\User\SignupRequest;
 use App\Http\Resources\User\UserResource;
+use Illuminate\Support\Facades\Validator;
 
 class UserController extends Controller
 {
@@ -23,6 +26,14 @@ class UserController extends Controller
             'last_name'=>$request->last_name,
             'email'=>$request->email,
             'password'=>Hash::make($request->password),
+        ]);
+
+        $user->cart()->create([
+            "user_id" => $user->id,
+        ]);
+
+        $user->wishlist()->create([
+            "user_id" => $user->id,
         ]);
 
         $user->refresh();
@@ -56,7 +67,12 @@ class UserController extends Controller
         }
     }
 
-    
+    public function logout(Request $request){
+        $request->user()->currentAccessToken()->delete();
+
+        return response()->json(['message'=>'Logged out successfully'], 200);
+    }
+
 
     // it will return a single user by user id
     public function getUserById($id){
@@ -74,94 +90,69 @@ class UserController extends Controller
     }
 
 
-    // // it will log the user out and will destroy all of the user's authenticated session data including session cookies.
-    // public function webLogout(){
-    //     Auth::logout();
-    //     return response()->json(['message' => 'Logout Successful'], 200);
-    // }
+    public function updateUser(Request $request){
+        $user= Auth::user();
 
-    // // it will return a list of all users
-    // public function getAllUsers(){
-    //     return UserResource::collection(User::all());
-    // }
+        $userData = [
+            "first_name"=>$request->first_name,
+            "last_name"=>$request->last_name,
+            "email"=>$request->email,
+        ];
 
+        if($request->hasFile("profile_image")){
+            $image = $request->file("profile_image");
 
+             $uuid = Str::uuid()->toString();
+             $extension = $image->getClientOriginalExtension();
+             $fileName = $uuid . '.' . $extension;
 
-    // public function createUser(UserRequest $request){
-    //     $path = null; // Initialize path to handle cases without image
+             // Define the path (relative to public or storage folder)
+             $destinationPath = public_path('images/user/profile_images');
 
-    //     if($request->hasFile('image')){
-    //         $filename = Carbon::now()->format('Ymd_His')."_".uniqid().".".$request->file('image')->getClientOriginalExtension();
+             // Move the file
+             $image->move($destinationPath, $fileName);
 
-    //         // Store the file in the 'public' disk under 'user_images' directory
-    //         $path = $request->file('image')->storeAs(
-    //             'user_images',
-    //             $filename,
-    //             'public'
-    //         );
-    //     }
+             $userData['profile_image'] = 'images/user/profile_images/' . $fileName;
+        }
 
-    //     $user = User::create([
-    //         'name' => $request->name,
-    //         'email' => $request->email,
-    //         'password' => Hash::make($request->password),
-    //         'role_id' => $request->role_id,
-    //         'image' => $path,
-    //         'created_by' => Auth::id(),
-    //     ]);
+        $user->update($userData);
 
-    //     return response()->json(['message' => 'User created successfully', 'user' => new UserResource($user)], 201);
-    // }
-
-    // // it will update a specific user's information
-    // public function updateUser(UserRequest $request, $id){
-    //     $user = User::find($id);
-    //     if(!$user){
-    //         return response()->json(['message' => 'User not found'], 404);
-    //     }
-
-    //     $path = $user->image; // Initialize path to the current image path
-
-    //     if($request->hasFile('image')){
-    //          // Delete old image if exists
-    //         if($path && Storage::disk('public')->exists($path)){
-    //             Storage::disk('public')->delete($path);; // Delete the old image file
-    //         }
-    //         // Generate a new unique filename to avoid overwriting the old file
-    //         $filename = Carbon::now()->format('Ymd_His')."_".uniqid().".".$request->file('image')->getClientOriginalExtension();
-
-    //         // Store the file in the 'public' disk under 'user_images' directory
-    //         $path = $request->file('image')->storeAs(
-    //             'user_images',
-    //             $filename,
-    //             'public'
-    //         );
-    //     }
-
-    //     $user->update([
-    //         'name' => $request->name,
-    //         'email' => $request->email,
-    //         'password' => $request->filled('password') ? Hash::make($request->password) : $user->password,
-    //         'role_id' => $request->role_id,
-    //         'image' => $path,
-    //     ]);
-    //     return new UserResource($user);
-    // }
-
-    // // it will simplay delete specific user
-    // public function deleteUser($id){
-    //     $user = User::find($id);
-    //     if(!$user){
-    //         return response()->json(['message' => 'User not found'], 404);
-    //     }
+        return response()->json(['message' => 'Profile updated successfully', 'user' => $user]);
+    }
 
 
-    //     if($user->image && Storage::disk('public')->exists($user->image)){
-    //         Storage::disk('public')->delete($user->image); // Delete user's image file
-    //     }
+    public function updatePassword(Request $request)
+{
+    Log::info("requst all ",$request->all());
+    $validator = Validator::make($request->all(), [
+        'old_password' => ['required'],
+        'new_password' => ['required', 'string', 'min:8', 'confirmed'],
+    ]);
 
-    //     $user->delete();
-    //     return response()->json(['message' => 'User deleted successfully'], 200);
-    // }
 
+    // If validation fails, return errors
+    if ($validator->fails()) {
+        return response()->json([
+            'errors' => $validator->errors(),
+        ], 422);
+    }
+
+    // Check if old password matches
+    if (!Hash::check($request->old_password, auth()->user()->password)) {
+        return response()->json([
+            'errors' => [
+                'old_password' => ['The old password does not match our records.'],
+            ],
+        ], 422);
+    }
+
+    // Update the password
+    auth()->user()->update([
+        'password' => bcrypt($request->new_password),
+    ]);
+
+    return response()->json([
+        'message' => 'Password updated successfully',
+    ]);
+}
 }

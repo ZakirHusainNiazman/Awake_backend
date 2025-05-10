@@ -17,7 +17,7 @@ return new class extends Migration
             ->constrained() // Shortcut for references('id')->on('products')
             ->cascadeOnDelete(); // Ensure UUID is used for `product_id`
         $table->string('name');
-        $table->string('type')->default('dropdown');
+        $table->string('type')->default('select');
         $table->timestamps();
 });
 

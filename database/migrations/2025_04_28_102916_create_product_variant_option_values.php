@@ -13,8 +13,7 @@ return new class extends Migration
     {
         Schema::create('product_variant_option_values', function (Blueprint $table) {
             $table->id();
-            // $table->unsignedInteger('product_variants_id');
-            // $table->unsignedInteger('product_options_values_id');
+
             $table->foreignUuid('product_variant_id')
                 ->constrained('product_variants')
                 ->cascadeOnDelete();

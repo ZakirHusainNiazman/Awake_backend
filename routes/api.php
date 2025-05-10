@@ -5,13 +5,16 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 use App\Http\Resources\User\UserResource;
+use App\Http\Controllers\User\CartController;
 use App\Http\Controllers\User\RoleController;
 use App\Http\Controllers\User\UserController;
 use App\Http\Controllers\User\AddressController;
 use App\Http\Controllers\User\ProfileController;
 use App\Http\Controllers\Seller\SellerController;
+use App\Http\Controllers\User\WishlistController;
 use App\Http\Controllers\Admin\AttributeController;
 use App\Http\Controllers\Category\CategoryController;
+use App\Http\Controllers\User\Cart\GuestCartController;
 use App\Http\Controllers\Seller\Product\ProductController;
 use App\Http\Controllers\Fullfillment\FullfillmentController;
 
@@ -23,24 +26,32 @@ use App\Http\Controllers\Fullfillment\FullfillmentController;
 Route::post('/user/signup',[UserController::class,'signup']);
 Route::post('/user/login',[UserController::class,'login']);
 
+
+//proudcts global routes
+
+// guest cart routes
+Route::post('/guest-cart', [GuestCartController::class, 'details']);
+
+Route::get('/products/new-arrivals', [ProductController::class, 'newArrivals']);
+Route::get('/seller/products/{id}',[ProductController::class,'show']);//this route will return all the product details
+
+
+
+
+
 Route::middleware(['auth:sanctum'])->group(function () {
-    Route::get('/user/logout', function () {
-        Auth::logout();
-        return response()->json(['message' => 'Logout Successful'], 200);
-    });
+    //controller which will send user profile data
     Route::get('/user/profile',[ProfileController::class,'show']);
-});
 
-
-
-Route::middleware(['auth:sanctum'])->group(function () {
-        // Users(company staff) related routes
-        Route::controller(UserController::class)->group(function () {
+    // Users(company staff) related routes
+    Route::controller(UserController::class)->group(function () {
+            Route::get('/user/logout','logout');
             Route::get('/all/users','getAllUsers');
             Route::get('/users/{id}','getUserById');
             Route::post('/add/user','createUser');
             Route::delete('/delete/user/{id}','deleteUser');
-            Route::put('/update/user/{id}','updateUser');
+            Route::post('/update/user','updateUser');
+            Route::post('/update/user/password','updatePassword');
         });
 
         Route::controller(RoleController::class)->group(function () {
@@ -75,7 +86,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
         });
 
-        Route::apiResource('addresses', AddressController::class);
+        Route::apiResource('/addresses', AddressController::class);
 
         //routes for attributes
         Route::controller(AttributeController::class)->group(function() {
@@ -92,7 +103,6 @@ Route::middleware(['auth:sanctum'])->group(function () {
             // All product routes handled by ProductController
             Route::controller(ProductController::class)->group(function () {
                 Route::get('/',             'index');
-                Route::get('{id}',          'show');
                 Route::post('/',            'store');
                 Route::put('{id}',          'update');
                 Route::delete('{id}',       'destroy');
@@ -127,6 +137,14 @@ Route::middleware(['auth:sanctum'])->group(function () {
                 ]);
             });
         });
+
+
+        // Cart routes
+        Route::apiResource('/carts', CartController::class);
+        Route::post('/carts/sync', [CartController::class,'syncGuestCartItems']);
+
+        // wishlist routes
+        Route::apiResource('/wishlists', WishlistController::class);
     });
 
 
@@ -139,7 +157,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
 
 
-
+//
 
 
 

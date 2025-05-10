@@ -2,7 +2,9 @@
 
 namespace App\Models\User;
 
+use App\Models\User\Cart;
 use App\Models\Seller\Seller;
+use App\Models\User\Wishlist;
 use Laravel\Sanctum\HasApiTokens;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
@@ -78,5 +80,26 @@ class User extends Authenticatable implements MustVerifyEmail
     public function seller(): HasOne
     {
         return $this->hasOne(Seller::class);
+    }
+
+
+    /**
+     * Get the cart associated with the User
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\HasOne
+     */
+    public function cart(): HasOne
+    {
+        return $this->hasOne(Cart::class);
+    }
+
+    /**
+     * Get the wishlist associated with the User
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\HasOne
+     */
+    public function wishlist(): HasOne
+    {
+        return $this->hasOne(Wishlist::class);
     }
 }

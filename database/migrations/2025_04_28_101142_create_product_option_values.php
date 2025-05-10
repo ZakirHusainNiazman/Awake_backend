@@ -17,6 +17,7 @@ return new class extends Migration
                   ->constrained('product_options')    // references product_options.id
                   ->cascadeOnDelete();
             $table->string('value');
+            $table->string('image_path')->nullable();
             $table->timestamps();
         });
     }

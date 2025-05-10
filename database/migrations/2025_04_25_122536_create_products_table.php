@@ -17,6 +17,10 @@ return new class extends Migration
             $table->string('sku')->unique()->nullable();
             $table->string('title');
             $table->text('details');
+           $table->foreignId("seller_id")->nullable()->constrained("sellers")->nullOnDelete();
+
+            $table->enum('condition', ['new', 'used', 'refurbished'])->default('new');
+            $table->enum('status', ['pending', 'approved', 'rejected'])->default('pending');
             // current on-hand quantity for no-variant products
             $table->unsignedInteger('stock')->default(0);
             $table->text('description')->nullable();
@@ -25,9 +29,6 @@ return new class extends Migration
             $table->json('attributes')->nullable(); // store attribute values when no variants
             //fields for discount
             $table->boolean('has_discount')->default(false);
-            $table->decimal('discount_amount', 8, 2)->nullable();
-            $table->timestamp('discount_start')->nullable();
-            $table->timestamp('discount_end')->nullable();
             $table->timestamps();
         });
     }

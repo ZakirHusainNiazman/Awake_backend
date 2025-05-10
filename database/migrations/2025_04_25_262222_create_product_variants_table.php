@@ -21,10 +21,7 @@ return new class extends Migration
             $table->json('attributes')->nullable(); // {"size":"M","color":"Red","image":"url_or_path.jpg"}
             //dicount fields
              $table->boolean('has_discount')->default(false);
-            $table->decimal('discount_amount', 8, 2)->nullable();
-            $table->timestamp('discount_start')->nullable();
-            $table->timestamp('discount_end')->nullable();
-
+            $table->enum('condiation', ['new', 'used', 'refurbished'])->default('new');
             $table->foreignUuid('product_id') // <-- Use foreignUuid() instead of uuid()
             ->constrained() // Shortcut for references('id')->on('products')
             ->cascadeOnDelete();

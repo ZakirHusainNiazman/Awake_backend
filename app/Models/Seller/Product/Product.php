@@ -2,12 +2,19 @@
 
 namespace App\Models\Seller\Product;
 
+use App\Models\User\Cart;
+use App\Models\User\Wishlist;
+use App\Models\Category\Category;
 use Illuminate\Database\Eloquent\Model;
 use App\Models\Seller\Product\ProductImage;
 use App\Models\Seller\Product\ProductOption;
 use App\Models\Seller\Product\ProductVariant;
+use App\Models\Seller\Product\ProductDiscount;
 use App\Models\Seller\Product\ProductOptionValue;
+use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Contracts\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use App\Models\Seller\Product\ProductVariantOptionValue;
 
 class Product extends Model
@@ -23,9 +30,7 @@ class Product extends Model
         'base_price',
         'has_variants',
         'attributes',
-        'discount_amount',
         'has_discount',
-      'discount_start','discount_end',
     ];
 
     // ─ disable auto-incrementing (we’ll supply our own UUIDs)
@@ -37,56 +42,34 @@ class Product extends Model
     // ─ if you like, you can also permanently cast your id
     //    (not required, but can help with serialization)
     protected $casts = [
-        'id' => 'string',
+      'attributes'      => 'array',
+      'has_discount' => 'boolean', // Ensures it gets cast to a boolean
     ];
 
 
     // helpers
-    public function getActiveDiscountAttribute()
+
+    //helper for getting the newly added products
+    public function scopeNewArrivals(Builder $query, int $limit = 12): Builder
     {
-        if (!$this->discount_type || !$this->discount_amount) {
-            return null;
-        }
-
-        $now = now();
-
-        if ($this->discount_start && $now->lt($this->discount_start)) {
-            return null;
-        }
-
-        if ($this->discount_end && $now->gt($this->discount_end)) {
-            return null;
-        }
-
-        return [
-            'type' => $this->discount_type,
-            'amount' => $this->discount_amount,
-        ];
+        return $query->orderByDesc('created_at')->limit($limit);
     }
+
 
     /**
      * Get all of the variants for the Product
      *
      * @return \Illuminate\Database\Eloquent\Relations\HasMany
      */
-   public function variants()
-{
-    return $this->hasMany(ProductVariant::class);
-}
-
-public function options()
-{
-    return $this->hasMany(ProductOption::class);
-}
-
-        public function values()
-        {
-            return $this->hasMany(ProductOptionValue::class);
+    public function variants(): HasMany
+    {
+        return $this->hasMany(ProductVariant::class);
     }
 
-    public function optionValues()
+
+      public function options()
     {
-        return $this->hasMany(ProductVariantOptionValue::class);
+        return $this->hasMany(ProductOption::class);
     }
 
     /**
@@ -99,5 +82,44 @@ public function options()
         return $this->hasMany(ProductImage::class);
     }
 
+    /**
+     * Get the category that owns the Product
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\BelongsTo
+     */
+    public function category(): BelongsTo
+    {
+        return $this->belongsTo(Category::class,"category_id");
+    }
 
+    /**
+     * Get the discount associated with the Product
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\HasOne
+     */
+    public function discount(): HasOne
+    {
+        return $this->hasOne(ProductDiscount::class);
+    }
+
+
+    /**
+     * Get all of the carts for the Product
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\HasMany
+     */
+    public function carts(): HasMany
+    {
+        return $this->hasMany(Cart::class);
+    }
+
+    /**
+     * Get all of the wishlists for the Product
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\HasMany
+     */
+    public function wishlists(): HasMany
+    {
+        return $this->hasMany(Wishlist::class);
+    }
 }
