@@ -3,6 +3,7 @@
 namespace App\Models\Seller\Product;
 
 use Illuminate\Support\Str;
+use App\Models\User\Order\OrderItem;
 use App\Models\Seller\Product\Product;
 use Illuminate\Database\Eloquent\Model;
 use App\Models\Seller\Product\VariantDiscount;
@@ -121,6 +122,18 @@ class ProductVariant extends Model
     public function discount(): HasOne
     {
         return $this->hasOne(VariantDiscount::class,'product_variant_id','id');
+    }
+
+
+
+    /**
+     * Get all of the orderItems for the Product
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\HasMany
+     */
+    public function orderItems(): HasMany
+    {
+        return $this->hasMany(OrderItem::class);
     }
 
 

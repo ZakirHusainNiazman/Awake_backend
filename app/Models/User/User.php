@@ -5,10 +5,12 @@ namespace App\Models\User;
 use App\Models\User\Cart;
 use App\Models\Seller\Seller;
 use App\Models\User\Wishlist;
+use App\Models\User\Order\Order;
 use Laravel\Sanctum\HasApiTokens;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -101,5 +103,15 @@ class User extends Authenticatable implements MustVerifyEmail
     public function wishlist(): HasOne
     {
         return $this->hasOne(Wishlist::class);
+    }
+
+    /**
+     * Get all of the orders for the User
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\HasMany
+     */
+    public function orders(): HasMany
+    {
+        return $this->hasMany(Order::class);
     }
 }

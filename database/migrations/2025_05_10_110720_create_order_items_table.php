@@ -13,6 +13,23 @@ return new class extends Migration
     {
         Schema::create('order_items', function (Blueprint $table) {
             $table->id();
+            $table->foreignId('order_id')->constrained()->onDelete('cascade');
+            $table->foreignUuid('product_id') // <-- Use foreignUuid() instead of uuid()
+            ->constrained() // Shortcut for references('id')->on('products')
+            ->cascadeOnDelete();
+
+            $table->foreignUuid('product_variant_id')
+                ->nullable()
+                ->constrained('product_variants')
+                ->cascadeOnDelete();
+
+            $table->string('title'); // snapshot of product title
+            $table->string('sku');   // snapshot SKU
+            $table->integer('quantity');
+            $table->decimal('price', 10, 2); // price per unit at the time of order
+            $table->decimal('total_price', 10, 2); // price × quantity
+            $table->json('attributes')->nullable(); // {"Color": "Red", "Size": "M"}
+            $table->string('image')->nullable(); // snapshot image URL
             $table->timestamps();
         });
     }

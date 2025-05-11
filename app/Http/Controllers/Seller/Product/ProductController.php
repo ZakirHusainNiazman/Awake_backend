@@ -6,6 +6,7 @@ use Exception;
 use Carbon\Carbon;
 use Illuminate\Support\Str;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use App\Http\Controllers\Controller;
@@ -62,6 +63,8 @@ class ProductController extends Controller
 
     public function store(StoreProductRequest $request)
     {
+
+        Log::info("product request data => ",$request->all());
         DB::beginTransaction();
 
         try {
@@ -95,21 +98,17 @@ class ProductController extends Controller
             }
 
             // 3) Upload & save product images
-            if ($request->hasFile('images')) {
-                foreach ($request->file('images') as $file) {
-                    $filename = Str::uuid().'.'.$file->getClientOriginalExtension();
-                    $dir = public_path("images/products/{$product->id}");
-                    File::ensureDirectoryExists($dir, 0755, true);
-                    $file->move($dir, $filename);
-                    ProductImage::create([
-                        'product_id' => $product->id,
-                        'image_url'  => "/images/products/{$product->id}/{$filename}",
-                    ]);
-                }
+            foreach ($request->file('images') as $file) {
+                $path = $this->saveImageFile($file, 'products', $product->id);
+                ProductImage::create([
+                    'product_id' => $product->id,
+                    'image_url'  => $path,
+                ]);
             }
 
             // 4) Create options & values
             if ($request->has_variants && $opts = $request->input('options', [])) {
+
                 foreach ($opts as $i => $optData) {
                     $opt = $product->options()->create([
                         'name'       => $optData['name'],
@@ -125,18 +124,13 @@ class ProductController extends Controller
                         foreach ($optData['imageValues'] as $j => $iv) {
                             $swatchFile = $request->file("options.{$i}.imageValues.{$j}.file");
                             $label = $iv['label'];
-
-                            $extension = $swatchFile->getClientOriginalExtension() ?: ($swatchFile->guessExtension() ?? 'bin');
-                            $fname = Str::uuid().'.'.$extension;
-                            $dir = public_path("images/products/{$product->id}/swatches");
-
-                            File::ensureDirectoryExists($dir, 0755, true);
-                            $swatchFile->move($dir, $fname);
+                            $path = $this->saveImageFile($swatchFile, "products/{$product->id}/swatches");
 
                             $opt->values()->create([
                                 'value'      => $label,
-                                'image_path' => "/images/products/{$product->id}/swatches/{$fname}",
+                                'image_path' => $path,
                             ]);
+
                         }
                     }
                 }
@@ -150,11 +144,8 @@ class ProductController extends Controller
 
                     if ($request->file("variants.{$k}.image")) {
                         $vf = $request->file("variants.{$k}.image");
-                        $fn = Str::uuid().'.'.$vf->getClientOriginalExtension();
-                        $d = public_path("images/products/{$product->id}/variants");
-                        File::ensureDirectoryExists($d, 0755, true);
-                        $vf->move($d, $fn);
-                        $imgUrl = "/images/products/{$product->id}/variants/{$fn}";
+                        $imgUrl = $this->saveImageFile($vf, "products/{$product->id}/variants");
+
                     }
 
                     // Create the variant including its own discount
@@ -214,6 +205,19 @@ class ProductController extends Controller
                 'error'   => $e->getMessage(),
             ], 500);
         }
+    }
+
+    private function saveImageFile(UploadedFile $file, string $baseFolder, ?string $prefix = null): string
+    {
+        $datePath = now()->format('Y/m/d');
+        $hashSegment = substr(md5($prefix ?? Str::uuid()), 0, 2);
+        $filename = Str::uuid().'.'.$file->getClientOriginalExtension();
+        $dir = public_path("images/{$baseFolder}/{$datePath}/{$hashSegment}");
+
+        File::ensureDirectoryExists($dir, 0755, true);
+        $file->move($dir, $filename);
+
+        return "images/{$baseFolder}/{$datePath}/{$hashSegment}/{$filename}";
     }
 
 

@@ -13,6 +13,7 @@ use App\Http\Controllers\User\ProfileController;
 use App\Http\Controllers\Seller\SellerController;
 use App\Http\Controllers\User\WishlistController;
 use App\Http\Controllers\Admin\AttributeController;
+use App\Http\Controllers\User\Order\OrderController;
 use App\Http\Controllers\Category\CategoryController;
 use App\Http\Controllers\User\Cart\GuestCartController;
 use App\Http\Controllers\Seller\Product\ProductController;
@@ -57,7 +58,6 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::controller(RoleController::class)->group(function () {
             Route::get('/all/roles','getAllRoles');
         });
-
 
         // Fullfillment locations related routes
         Route::controller(FullfillmentController::class)->group(function (){
@@ -145,6 +145,9 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
         // wishlist routes
         Route::apiResource('/wishlists', WishlistController::class);
+
+        // orders routes
+        Route::apiResource('/orders', OrderController::class);
     });
 
 

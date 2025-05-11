@@ -5,6 +5,7 @@ namespace App\Models\Seller\Product;
 use App\Models\User\Cart;
 use App\Models\User\Wishlist;
 use App\Models\Category\Category;
+use App\Models\User\Order\OrderItem;
 use Illuminate\Database\Eloquent\Model;
 use App\Models\Seller\Product\ProductImage;
 use App\Models\Seller\Product\ProductOption;
@@ -121,5 +122,16 @@ class Product extends Model
     public function wishlists(): HasMany
     {
         return $this->hasMany(Wishlist::class);
+    }
+
+
+    /**
+     * Get all of the orderItems for the Product
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\HasMany
+     */
+    public function orderItems(): HasMany
+    {
+        return $this->hasMany(OrderItem::class);
     }
 }
