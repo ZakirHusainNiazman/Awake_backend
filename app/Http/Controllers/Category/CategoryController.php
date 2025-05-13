@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers\Category;
 
+use Log;
 use Illuminate\Support\Str;
 use Illuminate\Http\Request;
 use App\Models\Category\Category;
+use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Category\CategoryRequest;
 use App\Http\Resources\Category\CategoryResource;
@@ -17,7 +19,16 @@ class CategoryController extends Controller
      */
     public function index()
     {
-        $categories = Category::with(['parent', 'children'])->get();
+        $categories = Category::all();
+
+        return CategoryResource::collection($categories);
+    }
+
+   public function categoriesWithChildren()
+    {
+        $categories = Category::with('children')
+            ->whereNull('parent_id')
+            ->get();
 
         return CategoryResource::collection($categories);
     }
@@ -170,5 +181,35 @@ class CategoryController extends Controller
         $category->delete();
 
         return response()->json(['status'=>'success','message' => 'Category deleted successfully']);
+    }
+
+    public function trending(Request $request)
+    {
+        $trendingCategoryStats = DB::table('product_stats')
+            ->join('products', 'product_stats.product_id', '=', 'products.id')
+            ->select('products.category_id', DB::raw('
+                SUM(CASE WHEN event = "view" THEN 1
+                        WHEN event = "wishlist" THEN 3
+                        WHEN event = "cart" THEN 5
+                        WHEN event = "purchase" THEN 10
+                    END) as trend_score
+            '))
+            ->groupBy('products.category_id')
+            ->orderByDesc('trend_score')
+            ->limit(10)
+            ->get();
+
+        // Extract brand_ids
+        $categoryIds = $trendingCategoryStats->pluck('category_id')->toArray();
+
+        // Get brands in the same order as trend_score (preserve order)
+        $brands = Category::whereIn('id', $categoryIds)
+            ->get()
+            ->sortBy(function ($category) use ($categoryIds) {
+                return array_search($category->id, $categoryIds);
+            })
+            ->values(); // Reset keys
+
+        return CategoryResource::collection($brands);
     }
 }

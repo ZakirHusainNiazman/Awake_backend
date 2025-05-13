@@ -28,8 +28,10 @@ class SellerResourceWithUser extends JsonResource
             'business_description' => $this->business_description,
             'identity_type' => $this->identity_type,
             'proof_of_identity' => $this->proof_of_identity ? url($this->proof_of_identity) : null,
-            'brand_name'=>$this->brand_name,
-            'brand_logo'=>url($this->brand_logo),
+            // Nested brand resource, if present
+            'brand' => $this->when($this->relationLoaded('brand') && $this->brand, function() {
+                return new BrandResource($this->brand);
+            }, null),
             //return only the default address
             'address' => new AddressResource(
                 $this->user?->defaultAddress,

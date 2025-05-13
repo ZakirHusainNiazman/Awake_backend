@@ -38,7 +38,7 @@ public function rules(): array
                 'required',
                 'string',
                 'max:255',
-                Rule::unique('sellers', 'brand_name'),
+                Rule::unique('brands', 'name'),
             ],
             'brand_logo' => [
                 'required',
@@ -134,7 +134,7 @@ public function rules(): array
         // Prevent duplicate seller account
             if ($user->user_type === 'seller') {
                 // You can also specify a custom message and status code
-                abort(400, 'There is already a seller acount register with email.'); // 400 Conflict
+                abort(409, 'There is already a seller acount register with email.'); // 409 Conflict
             }
         });
     }

@@ -244,7 +244,6 @@ class StoreProductRequest extends FormRequest
             // variants
             'variants.required'             => 'Variants array is required when has_variants is true.',
             'variants.array'                => 'Variants must be an array.',
-            'variants.*.sku.required_with'  => 'Each variant must have a SKU.',
             'variants.*.price.required_with'=> 'Each variant must have a price.',
             'variants.*.stock.required_with'=> 'Each variant must have a stock quantity.',
             'variants.*.image.required_with'=> 'Each variant must have exactly one image.',

@@ -4,8 +4,11 @@ namespace App\Models\Seller;
 
 use App\Models\User\User;
 use App\Models\Seller\Brand;
+use App\Models\Seller\SellerOrder;
+use App\Models\Seller\Product\Product;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Seller extends Model
@@ -59,4 +62,33 @@ class Seller extends Model
         return $this->belongsTo(User::class);
     }
 
+    /**
+     * Get the brand associated with the Seller
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\HasOne
+     */
+    public function brand(): HasOne
+    {
+        return $this->hasOne(Brand::class);
+    }
+
+    /**
+     * Get all of the orders for the Seller
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\HasMany
+     */
+    public function orders(): HasMany
+    {
+        return $this->hasMany(SellerOrder::class);
+    }
+
+    /**
+     * Get all of the products for the Seller
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\HasMany
+     */
+    public function products(): HasMany
+    {
+        return $this->hasMany(Product::class);
+    }
 }

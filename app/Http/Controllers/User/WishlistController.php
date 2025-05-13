@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use App\Models\User\Wishlist;
 use App\Models\User\WishlistItem;
 use App\Http\Controllers\Controller;
+use App\Services\ProductStatService;
 use Illuminate\Support\Facades\Auth;
 use App\Http\Resources\User\Wishlist\WishlistResource;
 use App\Http\Resources\User\Wishlist\WishlistItemResource;
@@ -35,7 +36,7 @@ class WishlistController extends Controller
     /**
      * Store a newly created resource in storage.
      */
-   public function store(StoreWishlistItemRequest $request)
+   public function store(StoreWishlistItemRequest $request,ProductStatService $statService)
 {
     $user = Auth::user();
     $wishlist = $user->wishlist;
@@ -63,6 +64,10 @@ class WishlistController extends Controller
             "message" => "The product with the selected variant already exists in the wishlist",
         ], 409); // Conflict
     }
+
+     //this log teh event to product stat
+        $statService->logEvent($product->id, 'wishlist');
+
 
     // Create wishlist item
     $wishlistItem = WishlistItem::create([

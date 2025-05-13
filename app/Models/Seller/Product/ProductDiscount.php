@@ -17,24 +17,24 @@ class ProductDiscount extends Model
     ];
 
 
-    public function getActiveAmount()
+   public function getActiveAmount()
     {
         $now = now();
 
-        if (!$this->is_valid || !$this->amount) return null;
-        if ($this->start_at && $now->lt($this->start_at)) return null;
-        if ($this->end_at && $now->gt($this->end_at)) return null;
+        if (!$this->discount_amount) return null;
+        if ($this->discount_start && $now->lt($this->discount_start)) return null;
+        if ($this->discount_end && $now->gt($this->discount_end)) return null;
 
-        return $this->amount;
+        return $this->discount_amount;
     }
 
-    public function isValid()
+   public function isValid()
     {
         $now = now();
 
-        if (!$this->is_valid || !$this->amount) return false;
-        if ($this->start_at && $now->lt($this->start_at)) return false;
-        if ($this->end_at && $now->gt($this->end_at)) return false;
+        if (!$this->discount_amount) return false;
+        if ($this->discount_start && $now->lt($this->discount_start)) return false;
+        if ($this->discount_end && $now->gt($this->discount_end)) return false;
 
         return true;
     }

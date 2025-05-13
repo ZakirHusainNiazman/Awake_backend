@@ -6,11 +6,12 @@ use Illuminate\Http\Request;
 use App\Models\User\CartItem;
 use Illuminate\Support\Facades\Log;
 use App\Http\Controllers\Controller;
+use App\Services\ProductStatService;
 use Illuminate\Support\Facades\Auth;
+use App\Http\Resources\User\Cart\CartResource;
 use App\Http\Requests\User\Cart\AddToCartRequest;
 use App\Http\Requests\User\Cart\UpdateCartRequest;
 use App\Http\Resources\User\Cart\CartItemResource;
-use App\Http\Resources\User\Cart\CartResource;
 
 class CartController extends Controller
 {
@@ -33,7 +34,7 @@ class CartController extends Controller
     /**
      * Store a newly created resource in storage.
      */
-    public function store(AddToCartRequest $request)
+    public function store(AddToCartRequest $request,ProductStatService $statService)
     {
         $user = Auth::user();
         $cart = $user->cart;
@@ -60,6 +61,10 @@ class CartController extends Controller
                 'variant_id' => $request->variant_id, // nullable
                 'quantity'   => $request->input('quantity', 1),
             ]);
+
+            //this log teh event to product stat
+             $statService->logEvent($product->id, 'cart');
+
         }
 
         return response()->json([

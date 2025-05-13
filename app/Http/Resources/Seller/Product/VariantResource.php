@@ -19,7 +19,7 @@ class VariantResource extends JsonResource
         'sku'          => $this->sku,
         'price'        => $this->price,
         'stock'        => $this->stock,
-        'image'        => $this->image,
+        'image'        => url($this->image),
         'attributes'   => $this->attributes,        // now an array
         'optionValues' => $this->optionValues->map(fn($v) => [
             'optionName' => $v->option->name,

@@ -6,6 +6,7 @@ use App\Models\Seller\Brand;
 use Illuminate\Http\Request;
 use App\Models\Seller\Seller;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Auth;
 use App\Http\Requests\Seller\SellerRequest;
@@ -48,6 +49,7 @@ class SellerController extends Controller
      */
     public function store(SellerRequest $request)
     {
+        Log::info("seller info ",$request->all());
             DB::beginTransaction();
 
         try {
@@ -63,6 +65,19 @@ class SellerController extends Controller
             // Store the relative path
             $imagePath = 'images/sellers_images/' . $filename;
 
+            $sellerData = $request->only([
+                'dob',
+                'whatsapp_no',
+                'store_name',
+                'business_description',
+                'identity_type',
+            ]);
+
+            $user = Auth::user();
+            $sellerData['user_id'] = $user->id;
+            $sellerData[ 'proof_of_identity'] = $imagePath;
+            //create seller
+            $seller = Seller::create($sellerData);
 
             //uploading brand image
             $brandImage = $request->file('brand_logo');
@@ -70,24 +85,13 @@ class SellerController extends Controller
             $brandImageName = uniqid() . '.' . $brandImage->getClientOriginalExtension();
             $brandImage->move(public_path('images/brands_images'), $brandImageName);
             // Store the relative path
-             $brandImage = 'images/brands_images/' . $brandImageName;
+            $brandImagePath = 'images/brands_images/' . $brandImageName;
 
-            $sellerData = $request->only([
-                'account_type',
-                'dob',
-                'whatsapp_no',
-                'store_name',
-                'business_description',
-                'identity_type',
-                'brand_name',
+            $seller->brand()->create([
+                'name'=>$request->brand_name,
+                'logo'=>$brandImagePath,
             ]);
 
-            $user = Auth::user();
-            $sellerData['user_id'] = $user->id;
-            $sellerData[ 'proof_of_identity'] = $imagePath;
-            $sellerData[ 'brand_logo' ] = $brandImageName;
-
-            $seller = Seller::create($sellerData);
 
             $seller->user->update([
                 'user_type'=>'seller',
@@ -115,7 +119,7 @@ class SellerController extends Controller
             DB::commit();
 
             // eager‑load user, addresses, brands
-            $seller->load(['user.addresses']);
+            $seller->load(['user.addresses', 'brand']);
 
                 return SellerResource::make($seller);
 
@@ -154,22 +158,12 @@ class SellerController extends Controller
     /**
      * Update the specified resource in storage.
      */
-    public function update(UpdateSellerRequest $request, string $id)
+    public function update(UpdateSellerRequest $request, Seller $seller)
     {
-            DB::beginTransaction();
+        DB::beginTransaction();
 
         try {
-
-
-            $seller = Seller::find($id);
-            if(!$seller){
-                return \response()->json([
-                    'status'=>"faild",
-                    'message'=>"Seller not found",
-                ],404);
-            }
-
-
+            // 1) Basic seller fields
             $sellerData = $request->only([
                 'account_status',
                 'dob',
@@ -179,58 +173,41 @@ class SellerController extends Controller
                 'identity_type',
             ]);
 
-            $file = $request->file('proof_of_identity');
-            $brandLogo = $request->file('brand_logo');
-
-            if($file){
-                $imagePath = $seller->proof_of_identity;
-                // Delete the uploaded image if it exists
-                if (isset($imagePath) && file_exists(public_path($imagePath))) {
-                    unlink(public_path($imagePath));
+            // 2) Proof-of-identity upload
+            if ($file = $request->file('proof_of_identity')) {
+                // remove old
+                if (file_exists(public_path($seller->proof_of_identity))) {
+                    unlink(public_path($seller->proof_of_identity));
                 }
-                // Generate unique filename
-                $filename = uniqid() . '.' . $file->getClientOriginalExtension();
-
-                $file->move(public_path('images/sellers_images'), $filename);
-
-                // Store the relative path
-                $imagePath = 'images/sellers_images/' . $filename;
-
-                $sellerData[ 'proof_of_identity'] = $imagePath;
+                $proofFilename = uniqid().'.'.$file->getClientOriginalExtension();
+                $file->move(public_path('images/sellers_images'), $proofFilename);
+                $sellerData['proof_of_identity'] = 'images/sellers_images/'.$proofFilename;
             }
 
-            if($brandLogo){
-                $imagePath = $seller->brand_logo;
-                // Delete the uploaded image if it exists
-                if (isset($imagePath) && file_exists(public_path($imagePath))) {
-                    unlink(public_path($imagePath));
-                }
-                // Generate unique filename
-                $brandLogoName = uniqid() . '.' . $brandLogo->getClientOriginalExtension();
-
-                $brandLogo->move(public_path('images/brands_images'), $brandLogoName);
-
-                // Store the relative path
-                $imagePath = 'images/brands_images/' . $brandLogoName;
-
-                $sellerData[ 'brand_logo'] = $imagePath;
-            }
-
-
+            // 3) Update seller row
             $seller->update($sellerData);
 
+            // 4) Brand update
+            $brandData = ['name' => $request->brand_name];
+            if ($brandFile = $request->file('brand_logo')) {
+                // remove old
+                if ($seller->brand && file_exists(public_path($seller->brand->logo))) {
+                    unlink(public_path($seller->brand->logo));
+                }
+                $brandFilename = uniqid().'.'.$brandFile->getClientOriginalExtension();
+                $brandFile->move(public_path('images/brands_images'), $brandFilename);
+                $brandData['logo'] = 'images/brands_images/'.$brandFilename;
+            }
+            $seller->brand()->update($brandData);
+
+            // 5) User info
             $seller->user->update([
-                'first_name'=>$request->first_name,
-                'last_name'=>$request->last_name,
-                'email'=>$request->email,
+                'first_name' => $request->first_name,
+                'last_name'  => $request->last_name,
+                'email'      => $request->email,
             ]);
 
-            // Check if the address is marked as default and handle existing default address
-            if ($request->boolean('is_default')) {
-                // Find and reset any existing default address
-                $seller->user->addresses()->where('is_default', true)->update(['is_default' => false]);
-            }
-
+            // 6) Addresses: either update the default or create new
             $addressData = $request->only([
                 'fullfillment_country_id',
                 'fullfillment_state_id',
@@ -240,32 +217,50 @@ class SellerController extends Controller
                 'postal_code',
                 'phone',
             ]);
-
             $addressData['is_default'] = true;
 
-             $seller->user->addresses()->where('is_default',1)->update($addressData);
+            // reset any existing default
+            $seller->user->addresses()
+                ->where('is_default', true)
+                ->update(['is_default' => false]);
+
+            // then upsert
+            // if you have an ID in the request you could update, otherwise always create
+            if ($request->filled('address_id')) {
+                $seller->user->addresses()
+                    ->updateOrCreate(
+                        ['id' => $request->address_id],
+                        $addressData
+                    );
+            } else {
+                $seller->user->addresses()->create($addressData);
+            }
 
             DB::commit();
 
-            // eager‑load user, addresses, brands
-            $seller->load(['user.addresses']);
+            // 7) Eager-load for the resource
+            $seller->load(['user.addresses', 'brand']);
 
-                return SellerResource::make($seller);
+            return SellerResource::make($seller);
 
         } catch (\Throwable $e) {
-            // Delete the uploaded image if it exists
-            if (isset($imagePath) && file_exists(public_path($imagePath))) {
-                unlink(public_path($imagePath));
+            DB::rollBack();
+
+            // Clean up any newly uploaded files
+            if (!empty($sellerData['proof_of_identity']) && file_exists(public_path($sellerData['proof_of_identity']))) {
+                unlink(public_path($sellerData['proof_of_identity']));
+            }
+            if (!empty($brandData['logo']) && file_exists(public_path($brandData['logo']))) {
+                unlink(public_path($brandData['logo']));
             }
 
-            DB::rollBack();
             return response()->json([
-                'message' => 'Updating Seller failed failed',
+                'message' => 'Updating seller failed',
                 'error'   => $e->getMessage(),
             ], 500);
         }
-
     }
+
 
     /**
      * Remove the specified resource from storage.

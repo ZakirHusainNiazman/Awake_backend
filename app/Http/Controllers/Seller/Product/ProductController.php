@@ -6,14 +6,18 @@ use Exception;
 use Carbon\Carbon;
 use Illuminate\Support\Str;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
+use App\Models\Category\Category;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use App\Http\Controllers\Controller;
+use App\Services\ProductStatService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\File;
 use App\Models\Seller\Product\Product;
 use Illuminate\Support\Facades\Storage;
+use App\Services\TrendingProductService;
 use App\Models\Seller\Product\ProductImage;
 use App\Models\Seller\Product\ProductOption;
 use App\Models\Seller\Product\ProductVariant;
@@ -21,34 +25,69 @@ use App\Models\Seller\Product\ProductOptionValue;
 use App\Http\Resources\Seller\Product\ProductResource;
 use App\Models\Seller\Product\ProductVariantOptionValue;
 use App\Http\Requests\Seller\Product\StoreProductRequest;
+use App\Http\Requests\Seller\Product\UpdateProductRequest;
 use App\Http\Resources\Seller\Product\UpdateProductResource;
 
 class ProductController extends Controller
 {
+
     // it will return all products for the authenticated seller
-    public function index()
-        {
-                        $products = Product::with([
-                            'category',
-                        'variants.optionValues.option', // Eager load 'option' relationship for each 'optionValue' of 'variant'
-                        'variants.optionValues',         // Eager load 'optionValues' for each variant
-                        'options.values',                // Eager load option values for the options
-                    ])->get();
+    public function index(Request $request)
+    {
 
+        $query = Product::with([
+            'category',
+            'variants.optionValues.option',
+            'variants.optionValues',
+            'options.values',
+        ])
+        ->withMin('variants', 'price'); // gets minimum variant price if exists
 
-            // Structure the data for easy identification by user
-            $productsWithVariants = $products->map(function ($product) {
-                // Check if the product has a discount, and set discount-related fields accordingly
-                $product->load('category');
+        $priceMin = $request->query('price_min');
+        $priceMax = $request->query('price_max');
 
-                return $product;
-            });
-
-            return ProductResource::collection($productsWithVariants);
+        // ✅ Filter by multiple category slugs
+        if ($request->filled('category_slug')) {
+            $categorySlugs = (array) $request->query('category_slug');
+            $categories = Category::whereIn('slug', $categorySlugs)->pluck('id');
+            if ($categories->isNotEmpty()) {
+                $query->whereIn('category_id', $categories);
+            } else {
+                return response()->json(['data' => []]);
+            }
         }
 
-    // it will show a single product by ID
-    public function show($id)
+        // ✅ Filter by multiple brand slugs
+        if ($request->filled('brand_slug')) {
+            $brandSlugs = (array) $request->query('brand_slug');
+            $brandIds = \App\Models\Seller\Brand::whereIn('slug', $brandSlugs)->pluck('id');
+
+            if ($brandIds->isNotEmpty()) {
+                $query->whereIn('brand_id', $brandIds);
+            } else {
+                return response()->json(['data' => []]);
+            }
+        }
+
+        $products = $query->get();
+
+        // ✅ Filter by effective price (variant or base + discount)
+        $filtered = $products->filter(function ($product) use ($priceMin, $priceMax) {
+            $variant = $product->variants->sortBy('price')->first();
+            $basePrice = $variant ? $variant->price : $product->base_price;
+            $effectivePrice = $product->discount_price ?? $basePrice;
+
+            return (!$priceMin || $effectivePrice >= $priceMin)
+                && (!$priceMax || $effectivePrice <= $priceMax);
+        });
+
+        return ProductResource::collection($filtered->values());
+    }
+
+
+
+    // it will show a single product to be edited by ID
+    public function show($id,ProductStatService $statService)
     {
         $product = Product::with([
             'category',
@@ -57,25 +96,31 @@ class ProductController extends Controller
             'options.values',               // Load values for each product option
         ])->findOrFail($id); // Find the product by ID or fail with 404
 
-        return ProductResource::make($product);
+        // Create the product stat record and get the instance
+        $statService->logEvent($product->id, 'view');
+
+        Log::info("product detail",["product",$product]);
+
+        return updateProductResource::make($product);
     }
 
 
     public function store(StoreProductRequest $request)
     {
-
-        Log::info("product request data => ",$request->all());
+        // Log::info("requset data ",$request->all());
         DB::beginTransaction();
 
         try {
 
             $user = Auth::user();
+            $brand = $user->seller->brand;
+            $brandId = $brand->id;
 
             // 2) Create the Product
             $product = Product::create([
                 'id'           => Str::uuid(),
                 'category_id'  => $request->category_id,
-                "seller_id"    => $user->seller->id,
+                "brand_id"    => $user->seller->brand->id,
                 'sku'          => $request->sku,
                 'title'        => $request->title,
                 'details'      => $request->details,
@@ -85,6 +130,7 @@ class ProductController extends Controller
                 'has_variants' => $request->has_variants,
                 'attributes'   => $request->input('attributes', []),
                 'has_discount'    => $request->has_discount,
+                'brand_id' => $brandId
             ]);
 
             if (!$request->has_variants && $request->has_discount) {
@@ -125,6 +171,7 @@ class ProductController extends Controller
                             $swatchFile = $request->file("options.{$i}.imageValues.{$j}.file");
                             $label = $iv['label'];
                             $path = $this->saveImageFile($swatchFile, "products/{$product->id}/swatches");
+                            Log::info("Swatch file:", ['key' => "options.{$i}.imageValues.{$j}.file", 'file' => $swatchFile]);
 
                             $opt->values()->create([
                                 'value'      => $label,
@@ -214,6 +261,8 @@ class ProductController extends Controller
         $filename = Str::uuid().'.'.$file->getClientOriginalExtension();
         $dir = public_path("images/{$baseFolder}/{$datePath}/{$hashSegment}");
 
+        Log::info("Swatch file:", ['path' => $dir]);
+
         File::ensureDirectoryExists($dir, 0755, true);
         $file->move($dir, $filename);
 
@@ -224,7 +273,7 @@ class ProductController extends Controller
 
 
 
-    public function update($id, StoreProductRequest $request)
+    public function update($id,UpdateProductRequest $request)
     {
         DB::beginTransaction();
 
@@ -243,7 +292,7 @@ class ProductController extends Controller
             // 2) Create the Product
             $product->update([
                 'category_id'  => $request->category_id,
-                "seller_id"    => $user->seller->id,
+                'brand_id'     => $user->seller->brand->id,
                 'sku'          => $request->sku,
                 'title'        => $request->title,
                 'details'      => $request->details,
@@ -254,6 +303,42 @@ class ProductController extends Controller
                 'attributes'   => $request->input('attributes', []),
                 'has_discount'    => $request->has_discount,
             ]);
+
+            if($request->hasFile('new_images')){
+                foreach ($request->file('new_images') as $file){
+                    $path = $this->saveImageFile($file, 'products', $product->id);
+                    ProductImage::create([
+                        'product_id' => $product->id,
+                        'image_url'  => $path,
+                    ]);
+                }
+            }
+
+            // Pull them as strings or an empty array
+            $raw = $request->input('removed_images', []);
+
+            // Cast every entry to ints
+            $removedIds = array_map('intval', (array)$raw);
+
+            if (!empty($removedIds)) {
+                // Fetch once using the integer IDs
+                 $toDelete = ProductImage::whereIn('id', $removedIds)->get();
+
+                 // Log how many we found
+                Log::info("Found ". $toDelete->count() ." images to delete", ['ids' => $removedIds]);
+
+
+                // Delete each image
+                foreach ($toDelete as $image) {
+                    $filePath = public_path($image->image_url); // Note: using image_url not url
+
+                    if (File::exists($filePath)) {
+                        File::delete($filePath); // delete the file from the filesystem
+                    }
+
+                    $image->delete(); // delete the DB record
+                }
+            }
 
              if (!$request->has_variants) {
                 if ($request->has_discount) {
@@ -266,41 +351,6 @@ class ProductController extends Controller
                     $product->discount()->updateOrCreate([], $discountData);
                 } else {
                     $product->discount()->delete();
-                }
-            }
-
-            //product images handlers
-
-            // 1. Delete ALL existing images
-            $product->images()->each(function ($image) {
-                Storage::delete($image->path);  // Delete physical file
-                $image->delete();              // Delete database record
-            });
-
-
-            // Update product images
-            if ($request->hasFile('images')) {
-                // Delete old images (optional)
-                foreach ($product->images as $oldImage) {
-                    File::delete(public_path($oldImage->image_url));
-                    $oldImage->delete();
-                }
-
-                // Upload and save new images
-                foreach ($request->file('images') as $imageFile) {
-                    $filename = Str::uuid() . '.' . $imageFile->getClientOriginalExtension();
-                    $destinationPath = public_path('images/products/' . $product->id);
-
-                    if (!File::exists($destinationPath)) {
-                        File::makeDirectory($destinationPath, 0755, true);
-                    }
-
-                    $imageFile->move($destinationPath, $filename);
-
-                    ProductImage::create([
-                        'product_id' => $product->id,
-                        'image_url'  => '/images/products/' . $product->id . '/' . $filename,
-                    ]);
                 }
             }
 
@@ -322,6 +372,23 @@ class ProductController extends Controller
 
 
 
+    // it will show a single product by ID to be shown to user
+    public function showProduct($id,ProductStatService $statService)
+    {
+        $product = Product::with([
+            'category',
+            'variants.optionValues.option', // Load option for each optionValue of the variant
+            'variants.optionValues',        // Load optionValues for each variant
+            'options.values',               // Load values for each product option
+        ])->findOrFail($id); // Find the product by ID or fail with 404
+
+        // Create the product stat record and get the instance
+        $statService->logEvent($product->id, 'view');
+
+
+        return ProductResource::make($product);
+    }
+
 
 
 
@@ -339,156 +406,12 @@ class ProductController extends Controller
         return ProductResource::collection($products);
     }
 
+    // this will use the service to get trending products based on producat state
+    public function trending(TrendingProductService $trending)
+    {
+        $trendingProducts = $trending->getTrendingProducts();
+
+        return ProductResource::collection($trendingProducts);
+    }
+
 }
-
-
-
-
-
-// public function store(StoreProductRequest $request)
-// {
-//     DB::beginTransaction();
-
-//     try {
-//         // 1) Create the Product
-//         $product = Product::create([
-//             'id'               => Str::uuid(),
-//             'category_id'      => $request->category_id,
-//             'sku'              => $request->sku,
-//             'title'            => $request->title,
-//             'details'          => $request->details,
-//             'stock'            => $request->stock,
-//             'description'      => $request->description,
-//             'base_price'       => $request->base_price,
-//             'has_variants'     => $request->has_variants,
-//             'attributes'       => $request->input('attributes', []),
-//             'has_discount'     => $request->has_discount,
-//             'discount_amount'  => $request->discount_amount,
-//             'discount_start'   => $request->discount_start,
-//             'discount_end'     => $request->discount_end,
-//         ]);
-
-//         // 2) Upload & save product images
-//         if ($request->hasFile('images')) {
-//             foreach ($request->file('images') as $file) {
-//                 $filename = Str::uuid().'.'.$file->getClientOriginalExtension();
-//                 $dir = public_path("images/products/{$product->id}");
-//                 if (!File::exists($dir)) File::makeDirectory($dir,0755,true);
-//                 $file->move($dir, $filename);
-//                 ProductImage::create([
-//                     'product_id' => $product->id,
-//                     'image_url'  => "/images/products/{$product->id}/{$filename}",
-//                 ]);
-//             }
-//         }
-
-//         // 3) Create options & values
-//         if ($request->has_variants && $opts = $request->input('options', [])) {
-//             foreach ($opts as $i => $optData) {
-//                 $opt = $product->options()->create([
-//                     'name'       => $optData['name'],
-//                     'type'       => $optData['type'],
-//                     'product_id' => $product->id,
-//                 ]);
-
-//                 if ($optData['type'] !== 'images') {
-//                     // select/text: simple string values
-//                     foreach ($optData['values'] as $val) {
-//                         $opt->values()->create(['value' => $val]);
-//                     }
-//                 } else {
-//                     // image swatches: upload each file & save label+path
-//                     // In the options handling section of store()
-//                     foreach ($optData['imageValues'] as $j => $iv) {
-//                         /** @var \Illuminate\Http\UploadedFile $swatchFile */
-//                         $swatchFile = $request->file("options.{$i}.imageValues.{$j}.file");
-//                         $label = $iv['label'];
-
-//                         // Get file extension safely
-//                         $extension = $swatchFile->getClientOriginalExtension();
-//                         if (empty($extension)) {
-//                             $extension = $swatchFile->guessExtension() ?? 'bin';
-//                         }
-
-//                         $fname = Str::uuid().'.'.$extension;
-//                         $dir = public_path("images/products/{$product->id}/swatches");
-
-//                         File::ensureDirectoryExists($dir, 0755, true);
-
-//                         try {
-//                             $swatchFile->move($dir, $fname);
-//                         } catch (\Exception $e) {
-//                             Log::error("File move failed: {$e->getMessage()}");
-//                             throw new \Exception("Could not save image file: {$e->getMessage()}");
-//                         }
-
-//                         $opt->values()->create([
-//                             'value' => $label,
-//                             'image_path' => "/images/products/{$product->id}/swatches/{$fname}",
-//                         ]);
-//                     }
-//                 }
-//             }
-//         }
-
-//         // 4) Build variants & pivot data
-//         $pivotRows = [];
-//         if ($request->has_variants && $vars = $request->input('variants', [])) {
-//             foreach ($vars as $k => $vData) {
-//                 // handle variant image
-//                 $imgUrl = null;
-//                 if ($request->file("variants.{$k}.image")) {
-//                     $vf = $request->file("variants.{$k}.image");
-//                     $fn = Str::uuid().'.'.$vf->getClientOriginalExtension();
-//                     $d  = public_path("images/products/{$product->id}/variants");
-//                     if (!File::exists($d)) File::makeDirectory($d,0755,true);
-//                     $vf->move($d,$fn);
-//                     $imgUrl = "/images/products/{$product->id}/variants/{$fn}";
-//                 }
-
-//                 // create variant row
-//                 $variant = $product->variants()->create([
-//                     'sku'        => $vData['sku'],
-//                     'price'      => $vData['price'],
-//                     'stock'      => $vData['stock'],
-//                     'image'      => $imgUrl,
-//                     'attributes' => json_encode($vData['attributes']),
-//                 ]);
-
-//                 // prepare pivot between this variant and each selected option-value
-//                 foreach ($vData['attributes'] as $optName => $valName) {
-//                     $ov = ProductOptionValue::where('value',$valName)
-//                           ->whereHas('option',fn($q)=>$q->where('name',$optName))
-//                           ->first();
-//                     if ($ov) {
-//                         $pivotRows[] = [
-//                             'product_variant_id'      => $variant->id,
-//                             'product_option_value_id' => $ov->id,
-//                             'created_at'              => now(),
-//                             'updated_at'              => now(),
-//                         ];
-//                     }
-//                 }
-//             }
-
-//             if (count($pivotRows)) {
-//                 ProductVariantOptionValue::insert($pivotRows);
-//             }
-//         }
-
-//         DB::commit();
-
-//         return response()->json([
-//             'message' => 'Product created successfully.',
-//             'product' => $product->load('images','options.values','variants'),
-//         ], 201);
-//     }
-//     catch (\Exception $e) {
-//         DB::rollBack();
-//         Log::error($e);
-//         return response()->json([
-//             'message' => 'Product creation failed.',
-//             'error'   => $e->getMessage(),
-//         ], 500);
-//     }
-// }

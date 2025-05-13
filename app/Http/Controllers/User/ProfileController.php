@@ -13,18 +13,21 @@ class ProfileController extends Controller
     // it will return a single user
     public function show(Request $request)
     {
-        $user = $request->user()->load([
-            'seller',
-            'seller.user.addresses',
-            'cart.items.product.variants.optionValues',
-            'cart.items.product.discount',
-            'cart.items.variant',
-            'wishlist.items.product.variants.optionValues',
-            'wishlist.items.product.discount',
-            'wishlist.items.variant.discount'
-        ]);
+            $user = $request->user()->load([
+        'seller.brand',
+        'seller.user.addresses', // if you really need addresses on the Seller → User pivot
+        'cart.items.product.variants.optionValues',
+        'cart.items.product.discount',
+        'cart.items.variant',
+        'wishlist.items.product.variants.optionValues',
+        'wishlist.items.product.discount',
+        'wishlist.items.variant.discount',
 
-        return new UserResourceWithSeller($user, 200);
+    ]);
+
+
+
+        return new UserResourceWithSeller($user);
     }
 
 

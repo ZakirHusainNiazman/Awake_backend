@@ -3,10 +3,12 @@
 namespace App\Models\Seller\Product;
 
 use App\Models\User\Cart;
+use App\Models\Seller\Seller;
 use App\Models\User\Wishlist;
 use App\Models\Category\Category;
 use App\Models\User\Order\OrderItem;
 use Illuminate\Database\Eloquent\Model;
+use App\Models\Seller\Product\ProductStat;
 use App\Models\Seller\Product\ProductImage;
 use App\Models\Seller\Product\ProductOption;
 use App\Models\Seller\Product\ProductVariant;
@@ -133,5 +135,25 @@ class Product extends Model
     public function orderItems(): HasMany
     {
         return $this->hasMany(OrderItem::class);
+    }
+
+    /**
+     * Get all of the stat for the Product
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\HasMany
+     */
+    public function stat(): HasMany
+    {
+        return $this->hasMany(ProductStat::class);
+    }
+
+    /**
+     * Get the seller that owns the Product
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\BelongsTo
+     */
+    public function seller(): BelongsTo
+    {
+        return $this->belongsTo(Seller::class);
     }
 }

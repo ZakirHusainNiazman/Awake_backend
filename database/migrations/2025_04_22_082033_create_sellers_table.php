@@ -20,8 +20,6 @@ return new class extends Migration
             $table->string('business_description')->nullable();
             $table->enum('identity_type', ['passport', 'driving_license', 'national_id_card']);
             $table->string('proof_of_identity');
-            $table->string("brand_name");
-            $table->string("brand_logo");
             $table->softDeletes();
             $table->timestamps();
         });

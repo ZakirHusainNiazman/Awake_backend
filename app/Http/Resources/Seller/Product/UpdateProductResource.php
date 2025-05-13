@@ -65,8 +65,8 @@ class UpdateProductResource extends JsonResource
             'images' => $this->images->map(function ($image) {
                 return [
                     'id' => $image->id,  // Send the image ID for existing images
-                    'image' => url($image->image_url),  // Send the image URL (or the actual file for new images)
-                    'is_new' => false,  // Mark as false for existing images
+                    'imageUrl' => url($image->image_url),  // Send the image URL (or the actual file for new images)
+                    'isNew' => false,  // Mark as false for existing images
                 ];
             }),
         ];

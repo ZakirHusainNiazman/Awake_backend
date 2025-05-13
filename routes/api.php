@@ -4,6 +4,7 @@ use App\Models\User\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\BrandController;
 use App\Http\Resources\User\UserResource;
 use App\Http\Controllers\User\CartController;
 use App\Http\Controllers\User\RoleController;
@@ -15,8 +16,10 @@ use App\Http\Controllers\User\WishlistController;
 use App\Http\Controllers\Admin\AttributeController;
 use App\Http\Controllers\User\Order\OrderController;
 use App\Http\Controllers\Category\CategoryController;
+use App\Http\Controllers\Seller\SellerOrderController;
 use App\Http\Controllers\User\Cart\GuestCartController;
 use App\Http\Controllers\Seller\Product\ProductController;
+use App\Http\Controllers\Seller\Product\VariantController;
 use App\Http\Controllers\Fullfillment\FullfillmentController;
 
 
@@ -34,8 +37,12 @@ Route::post('/user/login',[UserController::class,'login']);
 Route::post('/guest-cart', [GuestCartController::class, 'details']);
 
 Route::get('/products/new-arrivals', [ProductController::class, 'newArrivals']);
-Route::get('/seller/products/{id}',[ProductController::class,'show']);//this route will return all the product details
+Route::get('/products/trending', [ProductController::class, 'trending']);
+Route::get('/products',[ProductController::class,'index']);//this route will return all the products
+Route::get('/products/{id}',[ProductController::class,'showProduct']);//this route will return all the product details
 
+Route::get('/brands',[BrandController::class,'index']);//this route will return all brands
+Route::get('/brands/trending',[BrandController::class,'trending']);//this route will return all brands
 
 
 
@@ -104,13 +111,21 @@ Route::middleware(['auth:sanctum'])->group(function () {
             Route::controller(ProductController::class)->group(function () {
                 Route::get('/',             'index');
                 Route::post('/',            'store');
-                Route::put('{id}',          'update');
+                Route::get('/{id}',            'show');
+                Route::post('{id}',          'update');
                 Route::delete('{id}',       'destroy');
                 Route::post('{id}/receive-fba',    'receiveFBAStock');
                 Route::post('{id}/report-issues',  'reportFBAIssues');
             });
         });
+        Route::post('/variant-inventory/update', [VariantController::class, 'updateVariantInventory']);
 
+        Route::controller(SellerOrderController::class)->prefix('/seller/orders')->group(function(){
+            Route::get('','index');
+            Route::get('/{id}','show');
+            Route::get('/order-report/{orderId}','downloadOrderReport');
+
+        });
 
         //sellers routes
         Route::controller(SellerController::class)->prefix('sellers')->group(function () {
@@ -130,15 +145,6 @@ Route::middleware(['auth:sanctum'])->group(function () {
             //
         });
 
-        Route::middleware(['seller.checkStatus'])->group(function () {
-            Route::get('products', function(){
-                return response()->json([
-                    "message"=>"successs",
-                ]);
-            });
-        });
-
-
         // Cart routes
         Route::apiResource('/carts', CartController::class);
         Route::post('/carts/sync', [CartController::class,'syncGuestCartItems']);
@@ -152,6 +158,8 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
 
     // category related routes
+    Route::get('/categories/with-children', [CategoryController::class, 'categoriesWithChildren']);
+    Route::get('/categories/trending', [CategoryController::class, 'trending']);
     Route::apiResource('categories', CategoryController::class);
     Route::get('/categories/{category:slug}', [CategoryController::class, 'show']);
 
