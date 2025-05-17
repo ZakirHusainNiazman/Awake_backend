@@ -20,6 +20,7 @@ class SellerOrder extends Model
         'shipping_cost',
         'total',
         'status',
+        'commission',
     ];
 
 

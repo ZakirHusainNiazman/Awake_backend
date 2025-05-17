@@ -18,7 +18,6 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->statefulApi();
-
         $middleware->alias([
         'seller.checkStatus' => CheckSellerStatus::class,
     ]);

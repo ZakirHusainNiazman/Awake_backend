@@ -15,12 +15,19 @@ use App\Http\Controllers\Seller\SellerController;
 use App\Http\Controllers\User\WishlistController;
 use App\Http\Controllers\Admin\AttributeController;
 use App\Http\Controllers\User\Order\OrderController;
+use App\Http\Controllers\Admin\OrderReportController;
 use App\Http\Controllers\Category\CategoryController;
 use App\Http\Controllers\Seller\SellerOrderController;
 use App\Http\Controllers\User\Cart\GuestCartController;
+use App\Http\Controllers\Admin\AdminDashboardController;
+use App\Http\Controllers\Seller\MonthlyTargetController;
 use App\Http\Controllers\Seller\Product\ProductController;
 use App\Http\Controllers\Seller\Product\VariantController;
+use App\Http\Controllers\Seller\SellerDashboardController;
+use App\Http\Controllers\User\Order\OrderReviewController;
+use App\Http\Controllers\Admin\CompanyBrandBannerController;
 use App\Http\Controllers\Fullfillment\FullfillmentController;
+use App\Http\Controllers\User\Order\CustomerReportController;
 
 
 
@@ -39,6 +46,8 @@ Route::post('/guest-cart', [GuestCartController::class, 'details']);
 Route::get('/products/new-arrivals', [ProductController::class, 'newArrivals']);
 Route::get('/products/trending', [ProductController::class, 'trending']);
 Route::get('/products',[ProductController::class,'index']);//this route will return all the products
+Route::get('/products/search',[ProductController::class,'search']);//this route will return all the products
+Route::get('/products/recomended/{cId}',[ProductController::class,'recomended']);//this route will return all the products
 Route::get('/products/{id}',[ProductController::class,'showProduct']);//this route will return all the product details
 
 Route::get('/brands',[BrandController::class,'index']);//this route will return all brands
@@ -93,6 +102,21 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
         });
 
+        Route::prefix('admin')->middleware(['auth:sanctum'])->group(function () {
+            Route::get('/company-brand-banner', [CompanyBrandBannerController::class, 'show']);
+            Route::post('/company-brand-banner', [CompanyBrandBannerController::class, 'update']);
+            Route::get('/all-orders', [OrderController::class, 'getAllOrders']);
+            Route::post('/orders/report', [OrderReportController::class, 'download'])->name('orders.report.download');
+            Route::post('/orders/{id}/report', [OrderReportController::class, 'downloadSingleOrder']);
+
+            /// admin dashbaord controller
+            Route::controller(AdminDashboardController::class)->group(function () {
+                Route::get('/dashboard', 'index')->name('dashboard');
+                // Route::get('/customer-growth', 'customerGrowthStats')->name('customer-growth');
+
+            });
+        });
+
         Route::apiResource('/addresses', AddressController::class);
 
         //routes for attributes
@@ -104,6 +128,19 @@ Route::middleware(['auth:sanctum'])->group(function () {
             Route::put('/attributes/{attribute}', 'update');
             Route::delete('/attributes/{attribute}', 'destroy');
         });
+
+        Route::prefix('admin/customer-reports')->group(function () {
+            // Create a report
+            Route::get('/', [CustomerReportController::class, 'index']);
+
+            // View single report (auth: customer or admin)
+            Route::get('/{id}', [CustomerReportController::class, 'update']);
+
+
+            Route::patch('/{id}/resolved', [CustomerReportController::class, 'markResolved']);
+            Route::patch('/{id}/in-progress', [CustomerReportController::class, 'markInProgress']);
+        });
+
 
         // routes for products
         Route::prefix('seller/products')->group(function () {
@@ -120,11 +157,45 @@ Route::middleware(['auth:sanctum'])->group(function () {
         });
         Route::post('/variant-inventory/update', [VariantController::class, 'updateVariantInventory']);
 
+        // order reviews routes
+        Route::controller(OrderReviewController::class)->prefix('/order/reviews')->group(function(){
+            Route::get('${id}','index');
+            Route::post('','store');
+        });
+
+        Route::prefix('customer-reports')->group(function () {
+            // Create a report
+            Route::post('/', [CustomerReportController::class, 'store']);
+
+            // View single report (auth: customer or admin)
+            Route::get('/{id}', [CustomerReportController::class, 'show']);
+        });
+
+
         Route::controller(SellerOrderController::class)->prefix('/seller/orders')->group(function(){
             Route::get('','index');
+            Route::get('/recent','recent');
             Route::get('/{id}','show');
-            Route::get('/order-report/{orderId}','downloadOrderReport');
+            Route::post('/mark-order-as-delivered/{id}','markAsDelivered');
+            Route::post('/order-report/{orderId}','downloadOrderReport');
+        });
 
+        // seller routes for monthly targets
+
+         Route::controller(SellerOrderController::class)->prefix('seller')->group(function(){
+            // Create or update a monthly target
+            Route::post('/monthly-targets', [MonthlyTargetController::class, 'upsert']);
+            Route::get('/monthly-targets/all', [MonthlyTargetController::class, 'allTargetsWithRevenue']);
+            // Get the monthly target for a given month (passed as query param)
+            Route::get('/monthly-targets/{id}', [MonthlyTargetController::class, 'show']);
+
+        });
+
+        //seller dashboard routes
+        Route::controller(SellerDashboardController::class)->prefix('/seller/dashboard')->group(function(){
+            Route::get('/orders-count','sellerOrdersCount');
+            Route::get('/monthly-sales','getMonthlySales');
+            Route::get('/total-sales','getTotalRevenue');
         });
 
         //sellers routes
@@ -160,7 +231,9 @@ Route::middleware(['auth:sanctum'])->group(function () {
     // category related routes
     Route::get('/categories/with-children', [CategoryController::class, 'categoriesWithChildren']);
     Route::get('/categories/trending', [CategoryController::class, 'trending']);
-    Route::apiResource('categories', CategoryController::class);
+    Route::apiResource('categories', CategoryController::class)->except(['update']);
+    // Add your custom POST update route:
+    Route::post('categories/{category}', [CategoryController::class, 'update'])->name('categories.update');
     Route::get('/categories/{category:slug}', [CategoryController::class, 'show']);
 
 

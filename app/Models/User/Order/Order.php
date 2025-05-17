@@ -2,6 +2,7 @@
 
 namespace App\Models\User\Order;
 
+use App\Models\User\User;
 use App\Models\User\Address;
 use App\Models\User\Order\OrderItem;
 use Illuminate\Database\Eloquent\Model;
@@ -18,6 +19,8 @@ class Order extends Model
         'payment_method',
         'total_amount',
         'shipping_address_id',
+        'subtotal',
+        'commission',
     ];
 
     /**

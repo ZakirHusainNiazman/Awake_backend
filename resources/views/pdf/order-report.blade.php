@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html>
+
 <head>
     <meta charset="utf-8">
     <title>Order Report</title>
@@ -9,12 +10,14 @@
             margin: 0;
             padding: 0;
         }
+
         .header {
             background-color: orange;
             color: white;
             padding: 10px;
             text-align: center;
         }
+
         .footer {
             background-color: #007BFF;
             color: white;
@@ -25,28 +28,36 @@
             width: 100%;
             padding: 10px 0;
         }
+
         .content {
             padding: 20px;
-            margin-bottom: 60px; /* to avoid overlapping the footer */
+            margin-bottom: 60px;
+            /* to avoid overlapping the footer */
         }
+
         .info {
             margin-bottom: 20px;
         }
+
         table {
             width: 100%;
             border-collapse: collapse;
             margin-top: 15px;
         }
-        th, td {
+
+        th,
+        td {
             border: 1px solid #999;
             padding: 8px;
             text-align: left;
         }
+
         .signature-section {
             margin-top: 30px;
             display: flex;
             justify-content: space-between;
         }
+
         .sign {
             width: 45%;
             border-top: 1px solid #000;
@@ -55,6 +66,7 @@
         }
     </style>
 </head>
+
 <body>
     <div class="header">
         <strong>{{ $title }}</strong>
@@ -79,15 +91,32 @@
                 </tr>
             </thead>
             <tbody>
-                @foreach ($order->items as $index => $item)
-                <tr>
-                    <td>{{ $index + 1 }}</td>
-                    <td>{{ $item->title }}</td>
-                    <td>{{ json_decode($item->attributes)->Material ?? '-' }}</td> <!-- Get the attribute value -->
-                    <td>{{ $item->quantity }}</td>
-                    <td>${{ number_format($item->total_price, 2) }}</td>
-                </tr>
+            <tbody>
+                @foreach ($order['items'] as $index => $item)
+                    <tr>
+                        <td>{{ $index + 1 }}</td>
+                        <td>
+                            {{ $item['title'] }}<br>
+                            <small>SKU: {{ $item['sku'] }}</small>
+                        </td>
+                        <td>
+                            @if (!empty($item['attributes']))
+                                @php
+                                    $attributes = json_decode($item['attributes'], true);
+                                @endphp
+                                @foreach ($attributes as $key => $value)
+                                    {{ $key }}: {{ $value }}<br>
+                                @endforeach
+                            @else
+                                -
+                            @endif
+                        </td>
+                        <td>{{ $item['quantity'] }}</td>
+                        <td>${{ number_format($item['total_price'], 2) }}</td>
+                    </tr>
                 @endforeach
+            </tbody>
+
             </tbody>
         </table>
 
@@ -101,4 +130,5 @@
         {{ $companyName }} | {{ $companyAddress }} | {{ $companyEmail }}
     </div>
 </body>
+
 </html>

@@ -7,6 +7,7 @@ use App\Models\Seller\Seller;
 use App\Models\User\Wishlist;
 use App\Models\Category\Category;
 use App\Models\User\Order\OrderItem;
+use App\Models\User\Order\OrderReview;
 use Illuminate\Database\Eloquent\Model;
 use App\Models\Seller\Product\ProductStat;
 use App\Models\Seller\Product\ProductImage;
@@ -19,6 +20,7 @@ use Illuminate\Contracts\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use App\Models\Seller\Product\ProductVariantOptionValue;
+use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 
 class Product extends Model
 {
@@ -155,5 +157,22 @@ class Product extends Model
     public function seller(): BelongsTo
     {
         return $this->belongsTo(Seller::class);
+    }
+
+    /**
+     * Get all of the reviews for the Product
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\HasManyThrough
+     */
+    public function reviews(): HasManyThrough
+    {
+        return $this->hasManyThrough(
+            OrderReview::class,
+            OrderItem::class,
+            'product_id',       // Foreign key on order_items table
+            'order_item_id',    // Foreign key on order_reviews table
+            'id',               // Local key on products table
+            'id'                // Local key on order_items table
+        )->where('approved', true); // Only approved reviews
     }
 }

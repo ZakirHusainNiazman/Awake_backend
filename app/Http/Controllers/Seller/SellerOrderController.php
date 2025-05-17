@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Seller;
 
 use Log;
 use Exception;
+use App\Helpers\ImageHelper;
 use Illuminate\Http\Request;
 use Barryvdh\DomPDF\Facade\Pdf;
 use App\Models\Seller\SellerOrder;
@@ -37,7 +38,7 @@ class SellerOrderController extends Controller
         $seller = $user->seller;
 
         // Fetch the single order for the seller
-        $order = $seller->orders()->where("id", $request->id)->with(['items'])->first(); // Use first() instead of get()
+        $order = $seller->orders()->where("id", $request->id)->with(['items', 'order.user', 'order.shippingAddress'])->first(); // Use first() instead of get()
 
         // Check if the order exists
         if (!$order) {
@@ -51,53 +52,85 @@ class SellerOrderController extends Controller
 
 
 
-    // reporst functions
+    public function markAsDelivered(Request $request, string $id)
+    {
+        $sellerOrder = SellerOrder::find($id);
 
-//    public function downloadOrderReport($orderId)
-//     {
-//         Log::info('Download Order Report Request for Order ID: ' . $orderId); // Add logging here
-//         $order = SellerOrder::with('items')->findOrFail($orderId);
-
-//         $pdf = Pdf::loadView('pdf.order-report', [
-//             'title' => 'Order Report',
-//             'order' => $order,
-//             'companyName' => 'My Company',
-//             'companyAddress' => '123 Main Street, City',
-//             'companyEmail' => 'info@mycompany.com'
-//         ]);
-
-//         return response()->streamDownload(function () use ($pdf) {
-//             echo $pdf->output();
-//         }, 'order-report.pdf');
-//     }
-
-public function downloadOrderReport($orderId)
-{
-    try {
-        $order = SellerOrder::with('items')->findOrFail($orderId);
-
-        // Check if order has items
-        if ($order->items->isEmpty()) {
-            return response()->json(['message' => 'Order has no items'], 404);
-        }
-
-        // Generate the PDF
-        $pdf = Pdf::loadView('pdf.order-report', [
-            'title' => 'Order Report',
-            'order' => $order,
-            'companyName' => 'My Company',
-            'companyAddress' => '123 Main Street, City',
-            'companyEmail' => 'info@mycompany.com'
+        $request->validate([
+            'receipt_image' => 'required|image|mimes:jpeg,png,jpg|max:2048', // 2MB max
         ]);
 
-        // Try to return the PDF directly to debug
-        return $pdf->download('order-report.pdf');  // Use download() instead of streamDownload temporarily to test
+        // Store the image
+        $path = ImageHelper::saveImageFile($request->file('receipt_image'), 'receipts');
 
-    } catch (Exception $e) {
-        \Log::error('Error generating PDF: ' . $e->getMessage());
-        return response()->json(['message' => 'Failed to generate PDF'], 500);
+        if(!$sellerOrder){
+            return response()->json([
+                'message'=>"Order not found",
+            ],404);
+        }
+
+        Log::info("Marking order as delivered", ['seller_order' => $sellerOrder->toArray()]);
+
+        $sellerOrder->update([
+            'receipt_image' => $path,
+            'status'=>'delivered',
+            'delivered_at' => now(),
+        ]);
+
+        return response()->json(['message' => 'Marked as Delivere with receipt.']);
     }
-}
+
+    public function recent()
+    {
+        $user = Auth::user();
+        $seller = $user->seller;
+
+        $orders = SellerOrder::with('items')
+            ->where('seller_id', $seller->id)
+            ->latest()         // Orders by created_at descending
+            ->take(10)         // Only fetch latest 10 orders
+            ->get();
+
+            Log::info("request => ",['recent orders => ',$orders]);
+        return SellerOrderResource::collection($orders);
+    }
+
+
+
+
+
+
+
+    // reporst functions
+    public function downloadOrderReport($orderId)
+    {
+        try {
+            $order = SellerOrder::with('items')->findOrFail($orderId);
+
+            // Check if order has items
+            if ($order->items->isEmpty()) {
+                return response()->json(['message' => 'Order has no items'], 404);
+            }
+
+            // Generate the PDF
+            $pdf = Pdf::loadView('pdf.order-report', [
+                'title' => 'Order Report',
+                'order' => $order,
+                'companyName' => 'My Company',
+                'companyAddress' => '123 Main Street, City',
+                'companyEmail' => 'info@mycompany.com'
+            ]);
+
+            // Try to return the PDF directly to debug
+            return $pdf->download('order-report.pdf');  // Use download() instead of streamDownload temporarily to test
+
+        } catch (Exception $e) {
+            \Log::error('Error generating PDF: ' . $e->getMessage());
+            return response()->json(['message' => 'Failed to generate PDF'], 500);
+        }
+    }
+
+
 
 
 }

@@ -66,7 +66,7 @@ class WishlistController extends Controller
     }
 
      //this log teh event to product stat
-        $statService->logEvent($product->id, 'wishlist');
+        $statService->logEvent($request->product_id, 'wishlist');
 
 
     // Create wishlist item

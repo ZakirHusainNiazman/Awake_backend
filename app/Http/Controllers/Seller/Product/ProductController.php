@@ -380,6 +380,7 @@ class ProductController extends Controller
             'variants.optionValues.option', // Load option for each optionValue of the variant
             'variants.optionValues',        // Load optionValues for each variant
             'options.values',               // Load values for each product option
+            'reviews.user',               // Load reviews with user for the product
         ])->findOrFail($id); // Find the product by ID or fail with 404
 
         // Create the product stat record and get the instance
@@ -394,7 +395,7 @@ class ProductController extends Controller
 
 
 
-///product other methods like trending products and new arrivels
+///product other methods like trending products and new arrivels search
 
 
     public function newArrivals()
@@ -413,5 +414,42 @@ class ProductController extends Controller
 
         return ProductResource::collection($trendingProducts);
     }
+
+
+    public function search(Request $request)
+    {
+        $query = $request->input('q');
+
+        if (!$query) {
+            return response()->json([]);
+        }
+
+        $products = Product::where('title', 'like', '%' . $query . '%')
+        ->limit(10)
+        ->distinct()
+        ->get();
+
+        return ProductResource::collection($products);
+    }
+
+
+    // it will show recomended proudcts based on id product by ID to be shown to user
+    public function recomended(string $cId)
+    {
+        Log::info("request => ",["cid",$cId]);
+        $products = Product::where('category_id', $cId)
+            ->with([
+                'category',
+                'variants.optionValues.option',
+                'variants.optionValues',
+                'options.values',
+                'reviews.user',
+            ])
+            ->limit(10)
+            ->get();
+
+        return ProductResource::collection($products);
+    }
+
 
 }

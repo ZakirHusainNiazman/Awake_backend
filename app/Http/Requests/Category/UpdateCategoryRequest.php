@@ -18,6 +18,15 @@ class UpdateCategoryRequest extends FormRequest
         return true;
     }
 
+    protected function prepareForValidation(): void
+    {
+        $this->merge([
+            'commission_rate' => is_numeric($this->commission_rate) ? (float) $this->commission_rate : null,
+            'isChild' => filter_var($this->isChild, FILTER_VALIDATE_BOOLEAN),
+            'is_active' => filter_var($this->is_active, FILTER_VALIDATE_BOOLEAN),
+        ]);
+    }
+
     /**
      * Get the validation rules that apply to the request.
      *
@@ -26,6 +35,9 @@ class UpdateCategoryRequest extends FormRequest
 
     public function rules(): array
     {
+        Log::info("Request all input: ", request()->all());
+Log::info("commission_rate present?", ['commission_rate' => $this->input('commission_rate')]);
+
         $slug = $this->route('category');  // You get the bound category model automatically
         $categoryId = null;
         if($slug){

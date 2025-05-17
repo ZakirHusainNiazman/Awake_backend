@@ -63,7 +63,7 @@ class CartController extends Controller
             ]);
 
             //this log teh event to product stat
-             $statService->logEvent($product->id, 'cart');
+             $statService->logEvent($request->product_id, 'cart');
 
         }
 
@@ -73,7 +73,7 @@ class CartController extends Controller
                 'id' => $cartItem->id,
                 'product_id' => $cartItem->product_id,
                 'variant_id' => $cartItem->variant_id,
-                'quantity' => $cartItem->quantity,
+                'quantity' => 1,
             ]
         ], 201);
     }

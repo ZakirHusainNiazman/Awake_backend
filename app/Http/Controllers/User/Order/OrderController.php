@@ -20,7 +20,7 @@ class OrderController extends Controller
     /**
      * Display a listing of the resource.
      */
-   public function index()
+    public function index()
     {
         $user = Auth::user();
 
@@ -33,7 +33,7 @@ class OrderController extends Controller
     /**
      * Store a newly created resource in storage.
      */
-    public function store(Request $request,ProductStatService $statService)
+    public function store(Request $request, ProductStatService $statService)
     {
         $user = Auth::user();
 
@@ -41,111 +41,155 @@ class OrderController extends Controller
             return response()->json(['message' => 'Cart is empty.'], 400);
         }
 
-        // Get cart items grouped by seller
-        $cartItems = $user->cart->items()->with('product', 'variant')->get()->groupBy('product.seller_id');
+        $cartItems = $user->cart->items()->with('product.category', 'variant')->get()->groupBy('product.seller_id');
 
-        // Log::info("cartItems = >",$cartItems->all());
+        $allItems = $cartItems->flatten();
+        $subtotal = $allItems->sum(fn($item) => $this->getDiscountedPrice($item) * $item->quantity);
 
-        // Step 2: Calculate total from cart items
-        $total = $cartItems->reduce(function ($sum, $items) {
-            $subtotal = $items->reduce(function ($sum, $item) {
-                $price = $item->has_variant ? $item->variant->price : $item->product->base_price;
-                return $sum + ($price * $item->quantity);
-            }, 0.0);
-            return $sum + $subtotal;
-        }, 0.0);
+        // Calculate total using discounted prices
+        $total = $subtotal; // Add tax/shipping here if needed
 
         do {
-            // Generate order number
             $orderNumber = 'ORD-' . Carbon::now()->format('Ymd') . '-' . Str::upper(Str::random(9));
-
-            // Check if the order number already exists in the database
         } while (Order::where('order_number', $orderNumber)->exists());
 
-        // order creation transaction
         DB::beginTransaction();
 
         try {
-            // Creates order
             $order = $user->orders()->create([
                 'total_amount' => $total,
-                'payment_status'=>"paid",
-                'shipping_address_id'=>$request->address_id,
+                'subtotal' => $subtotal,
+                'payment_status' => "paid",
+                'shipping_address_id' => $request->address_id,
                 'order_number' => $orderNumber,
             ]);
 
-            Log::info("cartItems = >",['items',$cartItems]);
-            // Create SellerOrders and OrderItems
             $orderItems = [];
-           foreach ($cartItems as $sellerId => $items) {
-            // Calculate seller's subtotal
-            $sellerSubtotal = $items->reduce(function ($sum, $item) {
-                $price = $item->has_variant ? $item->variant->price : $item->product->base_price;
-                return $sum + ($price * $item->quantity);
-            }, 0.0);
+            $orderCommissionTotal = 0;
 
-            // Create SellerOrder for each seller
-            $sellerOrder = SellerOrder::create([
-                'order_id' => $order->id,
-                'seller_id' => $sellerId,
-                'order_number' => 'SO-' . Carbon::now()->format('Ymd') . '-' . $sellerId . '-' . Str::upper(Str::random(4)),
-                'subtotal' => $sellerSubtotal,
-                'shipping_cost' => 50, // Example shipping cost per seller
-                'total' => $sellerSubtotal + ($sellerSubtotal * 0.05) + 50,
-                'status' => 'pending',
-            ]);
+            foreach ($cartItems as $sellerId => $items) {
+                $sellerSubtotal = 0;
+                $sellerCommissionTotal = 0;
 
-            // Create order items for this seller
-            foreach ($items as $item) {
-                $price = $item->has_variant ? $item->variant->price : $item->product->base_price;
-                $sku = $item->has_variant ? $item->variant->sku : $item->product->sku;
-                $image = $item->has_variant ? $item->variant->image : $item->product->images[0]->image_url;
-                $product = $item->product;
+                // Calculate seller subtotal first
+                foreach ($items as $item) {
+                    $price = $this->getDiscountedPrice($item);
+                    $sellerSubtotal += $price * $item->quantity;
+                }
 
-                // Log the purchase event
-                $statService->logEvent($product->id, 'purchase');
-
-                $orderItems[] = new OrderItem([
-                    'product_id' => $item->product_id,
+                // Create SellerOrder before creating OrderItems
+                $sellerOrder = SellerOrder::create([
                     'order_id' => $order->id,
-                    'seller_order_id' => $sellerOrder->id, // Link to seller order
-                    'title' => $product->title,
-                    'sku' => $sku,
-                    'product_variant_id' => $item->variant_id,
-                    'price' => $price,
-                    'total_price' => $item->quantity * $price,
-                    'attributes' => $item->variant ? $item->variant->attributes : null,
-                    'quantity' => $item->quantity,
-                    'image' => $image,
+                    'seller_id' => $sellerId,
+                    'order_number' => 'SO-' . Carbon::now()->format('Ymd') . '-' . $sellerId . '-' . Str::upper(Str::random(4)),
+                    'subtotal' => $sellerSubtotal,
+                    'shipping_cost' => 50,
+                    'total' => $sellerSubtotal + ($sellerSubtotal * 0.05) + 50,
+                    'commission' => 0,  // Will update after loop
+                    'status' => 'pending',
                 ]);
+
+                foreach ($items as $item) {
+                    $price = $this->getDiscountedPrice($item);
+                    $quantity = $item->quantity;
+                    $itemTotalPrice = $price * $quantity;
+
+                    $product = $item->product;
+                    $category = $product->category;
+                    $commissionRate = $category ? ($category->commission_rate / 100) : 0;
+                    $itemCommission = $itemTotalPrice * $commissionRate;
+
+                    Log::info("test  => ",["category => ",$category,"commision rate = > ",$commissionRate,"item comisiion => ",$itemCommission]);
+
+                    $attributes = $item->variant?->attributes;
+                    if (is_string($attributes)) {
+                        $attributes = json_decode($attributes, true);
+                    }
+
+                    $orderItems[] = new OrderItem([
+                        'product_id' => $item->product_id,
+                        'order_id' => $order->id,
+                        'seller_order_id' => $sellerOrder->id,
+                        'title' => $product->title,
+                        'sku' => $item->has_variant ? $item->variant->sku : $product->sku,
+                        'product_variant_id' => $item->variant_id,
+                        'price' => $price,
+                        'total_price' => $itemTotalPrice,
+                        'commission' => $itemCommission,
+                        'attributes' => $attributes,
+                        'quantity' => $quantity,
+                        'image' => $item->has_variant ? $item->variant->image : $product->images[0]->image_url,
+                    ]);
+
+                    $sellerCommissionTotal += $itemCommission;
+
+                    $statService->logEvent($product->id, 'purchase');
+                }
+
+                // Update seller order commission after looping items
+                $sellerOrder->commission = $sellerCommissionTotal;
+                $sellerOrder->save();
+
+                $orderCommissionTotal += $sellerCommissionTotal;
             }
-        }
 
-        // Save all order items
-        $order->items()->saveMany($orderItems);
+            $order->items()->saveMany($orderItems);
 
-        // Step 6: Clear the cart
-        $user->cart->items()->delete();
+            // Save total commission on order
+            $order->commission = $orderCommissionTotal;
+            $order->save();
 
-        DB::commit();
+            $user->cart->items()->delete();
 
-        return OrderResource::make($order);
+            DB::commit();
+
+            return OrderResource::make($order);
 
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::info("error ",['message'=>$e->getMessage()]);
+            Log::error("Order creation failed", ['message' => $e->getMessage()]);
             return response()->json(['message' => 'Order creation failed', 'error' => $e->getMessage()], 500);
         }
-
-
     }
+
+    protected function getDiscountedPrice($item)
+    {
+        if ($item->has_variant) {
+            $price = $item->variant->price;
+            $discount = $item->variant->discount; // Assuming relation returns discount model or null
+        } else {
+            $price = $item->product->base_price;
+            $discount = $item->product->discount;
+        }
+
+        if ($discount && $discount->is_active) {
+            // For example, discount could be a percentage or fixed amount
+            if ($discount->type === 'percentage') {
+                return $price - ($price * ($discount->value / 100));
+            } elseif ($discount->type === 'fixed') {
+                return max(0, $price - $discount->value);
+            }
+        }
+
+        return $price;
+    }
+
 
     /**
      * Display the specified resource.
      */
     public function show(string $id)
     {
-        //
+        $user = Auth::user();
+        $order = $user->orders()->with(['items','shippingAddress'])->where('id',$id)->first();
+
+        if(!$order){
+            return response()->json([
+                'message'=>"Order not found.",
+            ]);
+        }
+
+        return OrderResource::make($order);
     }
 
     /**
@@ -163,4 +207,31 @@ class OrderController extends Controller
     {
         //
     }
+
+
+    // this function will get all ordrs to admin
+    public function getAllOrders(Request $request)
+    {
+        $query = Order::query();
+
+        // Optional status filter
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
+        }
+
+        // Optional price range filter
+        if ($request->filled('min')) {
+            $query->where('total_amount', '>=', $request->min);
+        }
+
+        if ($request->filled('max')) {
+            $query->where('total_amount', '<=', $request->max);
+        }
+
+        // Optional: Eager load relationships
+        $orders = $query->with(['items'])->latest()->get();
+
+        return OrderResource::collection($orders);
+    }
+
 }

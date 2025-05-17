@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use App\Http\Resources\Category\CategoryResource;
 use App\Http\Resources\Seller\Product\VariantResource;
+use App\Http\Resources\User\Order\OrderReviewResource;
 
 class ProductResource extends JsonResource
 {
@@ -26,6 +27,8 @@ class ProductResource extends JsonResource
             'sku'=>$this->sku,
             'status'=>$this->status,
             'condition' => $this->condition,
+            'created_at'=>$this->created_at,
+            'updated_at'=>$this->updated_at,
             'discount' => $this->has_discount && $this->discount
                     ? [
                         'hasDiscount' => $this->discount->isValid(),
@@ -39,6 +42,12 @@ class ProductResource extends JsonResource
                     ],
 
             'category'=> new CategoryResource($this->whenLoaded('category')),
+            'reviews' => OrderReviewResource::collection($this->whenLoaded('reviews')),
+            //average rating
+            'average_rating' => $this->whenLoaded('reviews', function () {
+                $ratings = $this->reviews->pluck('rating')->filter();
+                return $ratings->count() > 0 ? round($ratings->avg(), 1) : null;
+            }),
             'options' => $this->options->map(function ($o) {
                 $option = [
                     'name' => $o->name,
